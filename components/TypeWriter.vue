@@ -1,144 +1,170 @@
 <template>
-  <!-- <span>{{ outputText }}</span> -->
-  <!--打印闪烁光标 -->
-  <!-- <span class="blank" :style="aniStyle" >|</span> -->
-  <p v-for="(item, idx) in textArr">{{ item }}<span class="blank" :style="aniStyle" v-if="currentTextArrayIndex == idx">|</span></p>
+  <p v-for="(item, idx) in textArr" :key="idx">{{ item }}<span class="blank" :style="aniStyle" v-if="currentTextArrayIndex === idx">|</span></p>
 </template>
 
-<script>
-export default {
-  name: "typerwriter",
-  props: {
-    text: String,
-    texts: {
-      type: Array,
-      default: new Array(),
-    },
-    // 打印速度
-    wspeed: {
-      type: Number,
-      default: 150,
-    },
-    // 开启回溯打印
-    isBack: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  data() {
-    return {
-      loaclTexts: this.texts,
-      outputText: "",
-      // 当前打印字符串Index
-      currentTextCount: 1,
-      // 当前打印数组指针
-      currentTextArrayIndex: 0,
-      timer: Number,
-      logPrefix: "typewriter[log]: ",
-      forwadFlag: true, // 用来标记当前打印方向,
+<script setup lang="ts">
+import {ref, computed, onMounted, onUnmounted} from 'vue'
 
-      textArr: [],
-    };
+const props = defineProps({
+  text: String,
+  texts: {
+    type: Array as () => string[],
+    default: () => [],
   },
-  computed: {
-    aniStyle() {
-      return {
-        // 光标播放速度
-        // 根据设置的wspeed调整光标闪烁动画速度，
-        "animation-duration": this.wspeed / 1000 + "s",
-      };
-    },
+  wspeed: {
+    type: Number,
+    default: 200,
   },
-  created() {
-    this.typewriter();
+  isBack: {
+    type: Boolean,
+    default: false,
   },
-  unmounted() {
-    clearInterval(this.timer);
-  },
-  methods: {
-    typewriter() {
-      // 参数验证
-      if (!this.argumentJudge()) {
-        return;
-      }
-      // 只设置了text，将text放入loaclTexts
-      if (this.loaclTexts.length == 0) {
-        this.loaclTexts.push(this.text);
-      }
-      // 开启打印
-      this.timer = setInterval(this.forwardWriter, this.wspeed);
-    },
-    forwardWriter() {
-      // 全部打印完判断
-      if (this.currentTextArrayIndex >= this.loaclTexts.length) {
-        // 往回打印的情况，重置参数
-        if (this.isBack) {
-          this.currentTextArrayIndex = 0;
-          this.currentTextCount = 1;
-        } else {
-          // 不往回打印, 取消返回
-          clearInterval(this.timer);
-          return;
+})
+
+const getInitialLocalTexts = (): string[] => {
+  if (props.texts && props.texts.length > 0) {
+    return [...props.texts]
+  }
+  if (props.text) {
+    return [props.text]
+  }
+  return []
+}
+
+const localTexts = ref<string[]>(getInitialLocalTexts())
+const textArr = ref<string[]>(Array(localTexts.value.length).fill(''))
+const outputText = ref('') // Kept for internal logic, though not directly in template
+const currentTextCount = ref(1)
+const currentTextArrayIndex = ref(0)
+const timer = ref<ReturnType<typeof setInterval> | undefined>(undefined)
+const logPrefix = 'typewriter[log]: '
+const forwardFlag = ref(true)
+
+const aniStyle = computed(() => ({
+  'animation-duration': `${props.wspeed / 1000}s`,
+}))
+
+const argumentJudge = (): boolean => {
+  if (props.wspeed == null) {
+    console.log(logPrefix + '未设置打印速度')
+    return false
+  }
+  if (props.wspeed <= 0) {
+    console.log(logPrefix + '速度参数不对')
+    return false
+  }
+  if (!props.text && (!props.texts || props.texts.length === 0)) {
+    console.log(logPrefix + 'no string can writer')
+    return false
+  }
+  return true
+}
+
+const forwardWriter = () => {
+  if (timer.value) clearInterval(timer.value) // Clear previous timer before starting new logic path
+  timer.value = undefined
+
+  if (currentTextArrayIndex.value >= localTexts.value.length) {
+    if (props.isBack) {
+      currentTextArrayIndex.value = 0
+      currentTextCount.value = 1
+      textArr.value = Array(localTexts.value.length).fill('') // Reset for new loop
+      // Fall through to start typing forward for the first string
+    } else {
+      timer.value = setTimeout(() => {
+        currentTextArrayIndex.value = 0
+        currentTextCount.value = 1
+        textArr.value = Array(localTexts.value.length).fill('')
+        if (argumentJudge()) {
+          timer.value = setInterval(forwardWriter, props.wspeed)
         }
-      }
-      if (this.forwadFlag) {
-        let item = this.loaclTexts[this.currentTextArrayIndex];
-        // 往前打印
-        if (this.currentTextCount <= item.length) {
-          let tt = item.substring(0, this.currentTextCount);
-          this.outputText = tt;
-          this.textArr[this.currentTextArrayIndex] = tt;
-          this.currentTextCount++;
+      }, 5 * 1000) // 5-second overall restart delay
+      return
+    }
+  }
+
+  if (forwardFlag.value) {
+    const item = localTexts.value[currentTextArrayIndex.value]
+    if (currentTextCount.value <= item.length) {
+      const tt = item.substring(0, currentTextCount.value)
+      outputText.value = tt
+      textArr.value[currentTextArrayIndex.value] = tt
+      currentTextCount.value++
+      timer.value = setInterval(forwardWriter, props.wspeed) // Continue typing this string
+    } else {
+      // String finished typing forward
+      timer.value = setTimeout(() => {
+        if (props.isBack) {
+          forwardFlag.value = false
+          timer.value = setInterval(backWriter, props.wspeed / 2.5)
         } else {
-          // 当前字符串打印完，指向下一个并把索引归1
-          // 判断是否需要向后打印
-          if (this.isBack) {
-            this.forwadFlag = false;
+          currentTextArrayIndex.value++
+          currentTextCount.value = 1
+          if (currentTextArrayIndex.value < localTexts.value.length) {
+            timer.value = setInterval(forwardWriter, props.wspeed)
           } else {
-            this.currentTextArrayIndex++;
-            this.currentTextCount = 1;
+            // All strings typed, trigger overall completion/restart logic
+            forwardWriter()
           }
         }
-      } else {
-        // 向后打印
-        if (this.isBack) {
-          clearInterval(this.timer);
-          // 向后打印2.5倍速度
-          this.timer = setInterval(this.backWriter, this.wspeed / 2.5);
-        }
-      }
-    },
-    backWriter() {
-      if (this.currentTextCount >= 0) {
-        this.outputText = this.loaclTexts[this.currentTextArrayIndex].substring(0, this.currentTextCount);
+      }, 500) // 0.5-second delay
+    }
+  } else {
+    // forwardFlag is false, meaning we should be backspacing
+    if (props.isBack) {
+      timer.value = setInterval(backWriter, props.wspeed / 2.5)
+    } else {
+      // This case should ideally not be reached if forwardFlag is correctly managed
+      // If not isBack, forwardFlag should remain true. Reset to avoid dead state.
+      forwardFlag.value = true
+      timer.value = setInterval(forwardWriter, props.wspeed)
+    }
+  }
+}
 
-        this.currentTextCount--;
+const backWriter = () => {
+  if (timer.value) clearInterval(timer.value)
+  timer.value = undefined
+
+  if (currentTextCount.value >= 0) {
+    const item = localTexts.value[currentTextArrayIndex.value]
+    outputText.value = item.substring(0, currentTextCount.value)
+    textArr.value[currentTextArrayIndex.value] = outputText.value
+    currentTextCount.value--
+    timer.value = setInterval(backWriter, props.wspeed / 2.5) // Continue backspacing
+  } else {
+    // String finished backspacing
+    timer.value = setTimeout(() => {
+      currentTextArrayIndex.value++
+      forwardFlag.value = true
+      currentTextCount.value = 1
+      if (currentTextArrayIndex.value < localTexts.value.length) {
+        timer.value = setInterval(forwardWriter, props.wspeed)
       } else {
-        // 当前字符串打印完
-        // 指针自增打印下一个字符串
-        this.currentTextArrayIndex++;
-        this.forwadFlag = true;
-        this.currentTextCount = 1;
-        // 取消当前timer
-        clearInterval(this.timer);
-        this.timer = setInterval(this.forwardWriter, this.wspeed);
+        // All strings processed (forward and back), trigger overall completion/restart
+        forwardWriter()
       }
-    },
-    argumentJudge() {
-      if (this.wspeed == null) {
-        console.log(this.logPrefix + "未设置打印速度");
-        return false;
-      } else if (this.wspeed <= 0) {
-        console.log(this.logPrefix + "速度参数不对");
-        return false;
-      } else if (this.text == null && this.texts == null) {
-        console.log(this.logPrefix + "no string can writer");
-        return false;
-      }
-      return true;
-    },
-  },
-};
+    }, 500) // 0.5-second delay
+  }
+}
+
+const typewriter = () => {
+  if (!argumentJudge()) return
+  // Initial textArr setup based on potentially updated localTexts
+  textArr.value = Array(localTexts.value.length).fill('')
+  currentTextArrayIndex.value = 0
+  currentTextCount.value = 1
+  forwardFlag.value = true
+  forwardWriter() // Start the process
+}
+
+onMounted(() => {
+  typewriter()
+})
+
+onUnmounted(() => {
+  if (timer.value) clearInterval(timer.value)
+})
 </script>
 
 <style scoped>

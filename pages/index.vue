@@ -1,100 +1,89 @@
 <script setup lang="ts">
-const {$dayjs} = useNuxtApp();
-const diffTime = ref($dayjs("2024-01-06").diff($dayjs(), "seconds"));
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import dayjs from 'dayjs';
+
+const targetDate = dayjs("2024-12-06");
+const diffTime = ref<number | null>(null);
 let timer: any = null;
-const durationFormatter = computed(() => {
-  let res = [
-    {time: null, lable: "days"},
-    {time: null, lable: "hours"},
-    {time: null, lable: "minutes"},
-    {time: null, lable: "seconds"},
-  ];
-  const time = diffTime.value;
-  let t = time;
-  const ss = t % 60;
-  res[3].time = ss >= 10 ? `${ss}` : `0${ss}`;
-  t = (t - ss) / 60;
-  const mm = t % 60;
-  res[2].time = mm >= 10 ? `${mm}` : `0${mm}`;
-  t = (t - mm) / 60;
-  const hh = t % 24;
-  res[1].time = hh >= 10 ? `${hh}` : `0${hh}`;
-  t = (t - hh) / 24;
-  const dd = t;
-  res[0].time = dd >= 10 ? `${dd}` : `0${dd}`;
-  return res;
+
+const updateDiffTime = () => {
+  diffTime.value = targetDate.diff(dayjs(), "seconds");
+};
+
+onMounted(() => {
+  updateDiffTime(); // Calculate initial difference on client
+  timer = setInterval(() => {
+    updateDiffTime();
+    // Timer will now continue indefinitely, diffTime will become negative
+  }, 1000);
 });
 
-const getTime = () => {
-  // 避免重复执行 setTimeout
-  timer && clearTimeout(timer);
-  timer = setTimeout(() => {
-    if (diffTime.value >= 0) {
-      --diffTime.value;
-      getTime(); // 递归调用
-    } else {
-      console.log("倒计时结束");
-    }
-  }, 1000);
-};
-onMounted(() => {
-  getTime();
+onUnmounted(() => {
+  if (timer) {
+    clearInterval(timer);
+  }
 });
-onBeforeUnmount(() => {
-  clearInterval(timer);
-  timer = null;
+
+const durationLabels = ["days", "hours", "minutes", "seconds"];
+
+const durationFormatter = computed(() => {
+  if (diffTime.value === null) { // Only for initial uncalculated state
+    return durationLabels.map(label => ({ time: '00', label }));
+  }
+
+  const isNegative = diffTime.value < 0;
+  let t = Math.abs(diffTime.value);
+
+  const s = t % 60;
+  t = Math.floor(t / 60);
+  const m = t % 60;
+  t = Math.floor(t / 60);
+  const h = t % 24;
+  t = Math.floor(t / 24);
+  const d = t;
+
+  const values = [d, h, m, s];
+  const times = values.map(val => {
+    const formatted = val < 10 ? `0${val}` : `${val}`;
+    // If original diffTime is negative, prefix with '-'
+    // This will result in e.g., "-00", "-01", etc.
+    return isNegative ? `-${formatted}` : formatted;
+  });
+
+  return durationLabels.map((label, index) => ({ time: times[index], label }));
 });
+
+
 </script>
 
 <template>
-  <div class="index">
-    <!--header-->
-    <header><h1>Coming Soon Page</h1></header>
-    <!--//header-->
-    <!-- content -->
+  <div class="index zzjtnb">
+    <header><h1>Coming Soon</h1></header>
     <div class="main-content-agile">
       <div class="w3l-agile">
         <h2 class="">We are on the way</h2>
-        <p class="">Stay tuned for something amazing</p>
       </div>
-      <!--timer-->
       <div class="examples">
         <div class="simply-countdown-losange">
-          <div class="simply-section" v-for="item in durationFormatter" :key="item.lable">
+          <div class="simply-section" v-for="item in durationFormatter" :key="item.label">
             <span class="simply-amount"> {{ item.time }} </span>
-            <span class="simply-word">{{ item.lable }}</span>
+            <span class="simply-word">{{ item.label }}</span>
           </div>
         </div>
       </div>
-      <!--//timer-->
-      <!-- newsletter -->
-      <div class="sub-main-w3">
-        <form action="https://zzjtnb.com" method="post">
-          <p>Notify me when it's ready</p>
-          <div class="form-style-agile">
-            <input placeholder="Your Email Address......" name="Name" type="email" />
-            <input type="submit" value="Submit" />
-          </div>
-        </form>
-      </div>
-      <!-- //newsletter -->
       <div class="news">
-        <TypeWriter :texts="['这个世界上没有什么东西是永远属于你的,但有一个东西例外,那就是本领,谁也抢不走.', '一个浪迹天涯的游子回到故乡的时候,发现的第一件事总是自己的恋人变成别人的老婆.']" />
+        <TypeWriter :texts="['这个世界上没有什么东西是永远属于你的,但有一个东西例外,那就是本领,谁也抢不走.', '一个浪迹天涯的游子回到故乡的时候,发现的第一件事总是自己的恋人变成别人的老婆.']"  :wspeed="200"/>
       </div>
     </div>
-    <!-- //content -->
-    <!-- footer -->
     <footer class="footer">
       <p>
         Copyright &copy; 2019.zzjtnb All rights reserved.
         <a target="_blank" href="https://zzjtnb.com">Website HomePage</a>
       </p>
     </footer>
-    <!-- //footer -->
   </div>
 </template>
 <style>
-@import url("https://fonts.googleapis.com/css?family=Asap+Condensed:400,400i,500,500i,600,600i,700,700i");
 @import url("https://fonts.googleapis.com/css?family=Roboto+Condensed:300,300i,400,400i,700,700i");
 @import url("https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap");
 * {
@@ -108,12 +97,11 @@ onBeforeUnmount(() => {
   background-size: cover;
   background-attachment: fixed;
   background-position: center;
-  font-family: "Roboto Condensed", sans-serif;
+  font-family: 'Roboto Condensed', Arial, Helvetica, sans-serif;
   overflow: hidden;
   color: #fff;
 }
 
-/*-- header --*/
 h1 {
   font-size: 4vw;
   letter-spacing: 4px;
@@ -121,11 +109,11 @@ h1 {
   margin: 1.5vw 2vw 4vw;
   text-shadow: 1px 1px 2px #000;
   font-weight: 600;
-  font-family: "Asap Condensed", sans-serif;
 }
 
 .w3l-agile {
   text-align: center;
+  margin-bottom: 2vw; /* 增加底部间距 */
 }
 
 h2 {
@@ -133,98 +121,6 @@ h2 {
   letter-spacing: 1px;
   font-weight: 400;
 }
-
-.w3l-agile p {
-  color: #e4e4e4;
-  letter-spacing: 0.2vw;
-  font-weight: 100;
-  font-size: 1vw;
-  margin: 1em 0 2em;
-}
-
-h2 span {
-  color: #ffc107;
-}
-
-/*-- //header --*/
-
-/*-- content --*/
-
-.sub-main-w3 form {
-  max-width: 64rem;
-  margin: 4vw auto;
-}
-
-.sub-main-w3 p {
-  font-size: 1.5rem;
-  margin-bottom: 1vw;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.form-style-agile {
-  flex-basis: 100%;
-  -webkit-flex-basis: 100%;
-  display: -webkit-flex;
-  display: -moz-flex;
-  display: -ms-flexbox;
-  display: flex;
-  border: 6px solid rgba(8, 8, 8, 0.27);
-}
-
-.form-style-agile input[type="email"] {
-  outline: none;
-  font-size: 1rem;
-  border: none;
-  color: #000;
-  letter-spacing: 1px;
-  padding: 1rem;
-  background: #fff;
-  flex-basis: 75%;
-  box-sizing: border-box;
-  font-family: "Voltaire", sans-serif;
-}
-
-.sub-main-w3 input[type="submit"] {
-  background: #55d45a;
-  border: none;
-  padding: 15px 0;
-  outline: none;
-  flex-basis: 25%;
-  font-size: 15px;
-  cursor: pointer;
-  letter-spacing: 1px;
-  font-family: "Voltaire", sans-serif;
-  transition: 0.5s all;
-}
-
-.sub-main-w3 input[type="submit"]:hover {
-  transition: 0.5s all;
-}
-
-/*-- placeholder-color --*/
-
-::-webkit-input-placeholder {
-  color: #000;
-}
-
-:-moz-placeholder {
-  /* Firefox 18- */
-  color: #000;
-}
-
-::-moz-placeholder {
-  /* Firefox 19+ */
-  color: #000;
-}
-
-:-ms-input-placeholder {
-  color: #000;
-}
-
-/*-- //placeholder-color --*/
-
-/*-- timer --*/
 
 .examples {
   display: flex;
@@ -261,11 +157,11 @@ h2 span {
   border-radius: 4px;
 }
 
-span.simply-amount {
+.simply-amount {
   font-size: 60px;
 }
 
-span.simply-word {
+.simply-word {
   font-size: 18px;
   letter-spacing: 2px;
   margin-left: 5px;
@@ -274,12 +170,6 @@ span.simply-word {
   text-transform: capitalize;
   margin-top: 15%;
 }
-
-/*-- //timer --*/
-
-/*-- //content --*/
-
-/*-- footer --*/
 
 .footer {
   margin: 2vw 0.3vw 2vw;
@@ -302,9 +192,28 @@ span.simply-word {
   transition: 0.5s all;
 }
 
-/*-- //footer --*/
+.news {
+  font-family: "Ma Shan Zheng", cursive;
+  color: springgreen;
+  line-height: 2rem;
+  font-size: 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: left;
+  margin-top: 2rem;
+}
 
-/*-- responsive --*/
+.news p {
+  margin: 2rem 0;
+}
+
+@media (max-width: 1080px) {
+  .news {
+    text-align: center;
+  }
+}
 
 @media (max-width: 1920px) {
   h1 {
@@ -316,10 +225,6 @@ span.simply-word {
   h1 {
     font-size: 5vw;
   }
-
-  .sub-main-w3 p {
-    font-size: 18px;
-  }
 }
 
 @media (max-width: 800px) {
@@ -328,13 +233,10 @@ span.simply-word {
     margin: 3vw 2vw 5vw;
   }
 
-  span.simply-amount {
+  .simply-amount {
     font-size: 56px;
   }
 
-  .sub-main-w3 form {
-    margin: 6vw 5vw;
-  }
 
   h2 {
     font-size: 2em;
@@ -438,12 +340,17 @@ span.simply-word {
   font-family: "Ma Shan Zheng", cursive;
   color: springgreen;
   line-height: 2rem;
-  font-size: 1.6rem;
+  font-size: 2rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   text-align: left;
+  margin-top: 2rem;
+
+}
+.news p {
+  margin: 2rem 0;
 }
 @media (max-width: 1080px) {
   .news {
